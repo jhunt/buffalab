@@ -1,0 +1,57 @@
+{
+	"ImportPath": "github.com/jhunt/buffalab",
+	"GoVersion": "go1.7",
+	"GodepVersion": "v79",
+	"Deps": [
+		{
+			"ImportPath": "github.com/pin/tftp",
+			"Comment": "v2.1.0-6-gb859b2b",
+			"Rev": "b859b2b3f2354540e40b9d447f131887dba7b726"
+		},
+		{
+			"ImportPath": "github.com/pin/tftp/netascii",
+			"Comment": "v2.1.0-6-gb859b2b",
+			"Rev": "b859b2b3f2354540e40b9d447f131887dba7b726"
+		},
+		{
+			"ImportPath": "golang.org/x/crypto/curve25519",
+			"Rev": "c2303dcbe84172e0c0da4c9f083eeca54c06f298"
+		},
+		{
+			"ImportPath": "golang.org/x/crypto/ed25519",
+			"Rev": "c2303dcbe84172e0c0da4c9f083eeca54c06f298"
+		},
+		{
+			"ImportPath": "golang.org/x/crypto/ed25519/internal/edwards25519",
+			"Rev": "c2303dcbe84172e0c0da4c9f083eeca54c06f298"
+		},
+		{
+			"ImportPath": "golang.org/x/crypto/ssh",
+			"Rev": "c2303dcbe84172e0c0da4c9f083eeca54c06f298"
+		},
+		{
+			"ImportPath": "golang.org/x/net/bpf",
+			"Rev": "ffcf1bedda3b04ebb15a168a59800a73d6dc0f4d"
+		},
+		{
+			"ImportPath": "golang.org/x/net/internal/iana",
+			"Rev": "ffcf1bedda3b04ebb15a168a59800a73d6dc0f4d"
+		},
+		{
+			"ImportPath": "golang.org/x/net/internal/netreflect",
+			"Rev": "ffcf1bedda3b04ebb15a168a59800a73d6dc0f4d"
+		},
+		{
+			"ImportPath": "golang.org/x/net/ipv4",
+			"Rev": "ffcf1bedda3b04ebb15a168a59800a73d6dc0f4d"
+		},
+		{
+			"ImportPath": "golang.org/x/net/ipv6",
+			"Rev": "ffcf1bedda3b04ebb15a168a59800a73d6dc0f4d"
+		},
+		{
+			"ImportPath": "gopkg.in/yaml.v2",
+			"Rev": "a3f3340b5840cee44f372bddb5880fcbc419b46a"
+		}
+	]
+}
