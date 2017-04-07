@@ -8,10 +8,11 @@ import (
 )
 
 type Config struct {
-	Root     string    `yaml:"root"`
-	Listen   string    `yaml:"listen"`
-	Flavors  []string  `yaml:"flavors"`
-	Machines []Machine `yaml:"machines"`
+	Root       string    `yaml:"root"`
+	ListenHTTP string    `yaml:"listen_http"`
+	ListenTFTP string    `yaml:"listen_tftp"`
+	Flavors    []string  `yaml:"flavors"`
+	Machines   []Machine `yaml:"machines"`
 }
 
 func ReadConfig(path string) (Config, error) {
@@ -30,8 +31,11 @@ func ReadConfig(path string) (Config, error) {
 	if c.Root == "" {
 		c.Root = "/tftproot"
 	}
-	if c.Listen == "" {
-		c.Listen = ":8085"
+	if c.ListenHTTP == "" {
+		c.ListenHTTP = ":80"
+	}
+	if c.ListenTFTP == "" {
+		c.ListenTFTP = ":69"
 	}
 	return c, nil
 }

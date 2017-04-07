@@ -1,0 +1,254 @@
+#!/bin/bash
+set -u
+
+rc=0
+
+bail() {
+	echo >&2 $*
+	exit 2
+}
+testing() {
+	rm -f tmp/got tmp/want tmp/diff tmp/errors
+	local v=$1 ; shift
+	echo -n "[$v] $*... "
+}
+ok() {
+	echo "ok"
+}
+fail() {
+	echo "FAILED!"
+	rc=1
+}
+exists() {
+	if [[ ! -f "$1" ]]; then
+		fail
+		echo " exepected file '$1' to exist."
+		echo "   but it did not.  bummer."
+	else
+		ok
+	fi
+}
+enoent() {
+	if [[ -f "$1" ]]; then
+		fail
+		echo " exepected file '$1' to not exist."
+		echo "   but it totally did.  whoa."
+	else
+		ok
+	fi
+}
+fileok() {
+	if [[ ! -f "$1" ]]; then
+		fail
+		echo " expected file '$1' to exist."
+		echo "   but it did not.  bummer."
+	else
+		cp $1 tmp/got
+		diffok
+	fi
+}
+diffok() {
+	if [[ -f tmp/errors && -s tmp/errors ]]; then
+		fail
+		echo "(with errors:)"
+		cat tmp/errors
+		echo ; echo
+	elif ! diff -u tmp/got tmp/want >tmp/diff 2>&1; then
+		fail
+		cat tmp/diff
+		echo ; echo
+	else
+		ok
+	fi
+}
+yamlok() {
+	[ -s tmp/got ] || echo "--- {}" > tmp/got
+	spruce merge tmp/got  > tmp/got.x   ; mv tmp/got.x  tmp/got
+	spruce merge tmp/want > tmp/want.x  ; mv tmp/want.x tmp/want
+	diffok
+}
+exitok() {
+	if [[ $1 -eq $2 ]]; then
+		ok
+	else
+		fail
+		echo " expected process to exit $2"
+		echo "   but it actually exited $1"
+	fi
+}
+
+CURL="curl -sL"
+HTTP="http://127.0.0.1:4080"
+
+rm -rf tmp/
+mkdir -p tmp/root/{tpl,pxelinux.cfg}
+for x in vanilla chocolate; do
+	for y in controller node; do
+		echo "this is a $x $y" > tmp/root/tpl/$x-$y
+	done
+done
+cat > tmp/buffalab.yml <<EOF
+root: tmp/root
+listen_http: '127.0.0.1:4080'
+listen_tftp: '127.0.0.1:4069'
+
+flavors:
+  - vanilla
+  - chocolate
+
+machines:
+  - name: lab1
+    mac:  11-22-33-44-55-66
+    role: controller
+
+  - name: lab2
+    mac:  aa-bb-cc-dd-ee-ff
+    role: node
+EOF
+#trap 'rm -rf tmp/' INT QUIT TERM EXIT
+
+if [[ ! -x buffalabd ]]; then
+	make local
+fi
+killall buffalabd 2>/dev/null || true
+BUFFALAB_CONFIG=tmp/buffalab.yml ./buffalabd > tmp/server.log 2>&1 &
+PID=$!
+sleep 0.5
+kill -0 $PID 2>/dev/null || bail "buffalabd process $PID seems to have died..."
+echo "buffalab is up and running (pid $PID)"
+
+testing api initial status is good
+$CURL $HTTP/api/status > tmp/got \
+	|| bail "FAILED to GET /api/status!"
+cat >tmp/want <<EOF
+---
+flavor: none
+nodes:
+  lab1: new
+  lab2: new
+EOF
+yamlok
+
+testing tftp config for lab1 does not exist before installation
+enoent tmp/root/pxelinux.cfg/01-11-22-33-44-55-66
+
+testing tftp config for lab2 does not exist before installation
+enoent tmp/root/pxelinux.cfg/01-aa-bb-cc-dd-ee-ff
+
+testing api initiating a new installation
+$CURL $HTTP/api/install -X POST -d vanilla > tmp/got \
+	|| bail "FAILED to POST /api/install ('vanilla')!"
+cat > tmp/want <<EOF
+EOF
+diffok
+
+testing tftp config for lab1 exists after installation
+echo "this is a vanilla controller" > tmp/want
+fileok tmp/root/pxelinux.cfg/01-11-22-33-44-55-66
+
+testing tftp config for lab2 exists after installation
+echo "this is a vanilla node" > tmp/want
+fileok tmp/root/pxelinux.cfg/01-aa-bb-cc-dd-ee-ff
+
+testing api status endpoint lists new flavor
+$CURL $HTTP/api/status > tmp/got \
+	|| bail "FAILED to GET /api/status!"
+cat >tmp/want <<EOF
+---
+flavor: vanilla
+nodes:
+  lab1: installing
+  lab2: installing
+EOF
+yamlok
+
+testing api node reporting back ok
+$CURL $HTTP/api/lab2/ok -X POST > tmp/got \
+	|| bail "FAILED to POST /api/lab2/ok!"
+echo > tmp/want
+cat > tmp/want <<EOF
+EOF
+diffok
+
+testing tftp config for lab1 still exists after lab2 reports back
+exists tmp/root/pxelinux.cfg/01-11-22-33-44-55-66
+
+testing tftp config for lab2 no longer exists after it reports back
+enoent tmp/root/pxelinux.cfg/01-aa-bb-cc-dd-ee-ff
+
+testing api status reflects ok node lab2
+$CURL $HTTP/api/status > tmp/got \
+	|| bail "FAILED to GET /api/status!"
+cat >tmp/want <<EOF
+---
+flavor: vanilla
+nodes:
+  lab1: installing
+  lab2: ok
+EOF
+yamlok
+
+testing api node reporting back as provisioned
+$CURL $HTTP/api/lab1/provisioned -X POST > tmp/got \
+	|| bail "FAILED to POST /api/lab1/provisioned!"
+echo > tmp/want
+cat > tmp/want <<EOF
+EOF
+diffok
+
+testing api status reflects lab1/lab2 as provisioned/ok
+$CURL $HTTP/api/status > tmp/got \
+	|| bail "FAILED to GET /api/status!"
+cat >tmp/want <<EOF
+---
+flavor: vanilla
+nodes:
+  lab1: provisioned
+  lab2: ok
+EOF
+yamlok
+
+testing tftp config for lab1 no longer exists after it reports back
+enoent tmp/root/pxelinux.cfg/01-11-22-33-44-55-66
+
+testing tftp config for lab2 no longer exists after it reports back
+enoent tmp/root/pxelinux.cfg/01-aa-bb-cc-dd-ee-ff
+
+testing api installation resets node status
+$CURL $HTTP/api/install -X POST -d chocolate > tmp/got \
+	|| bail "FAILED to POST /api/install ('chocolate')!"
+cat > tmp/want <<EOF
+EOF
+diffok
+
+testing api status reflects lab1/lab2 as installing/installing
+$CURL $HTTP/api/status > tmp/got \
+	|| bail "FAILED to GET /api/status!"
+cat >tmp/want <<EOF
+---
+flavor: chocolate
+nodes:
+  lab1: installing
+  lab2: installing
+EOF
+yamlok
+
+testing tftp config for lab1 exists after installation
+echo "this is a chocolate controller" > tmp/want
+fileok tmp/root/pxelinux.cfg/01-11-22-33-44-55-66
+
+testing tftp config for lab2 exists after installation
+echo "this is a chocolate node" > tmp/want
+fileok tmp/root/pxelinux.cfg/01-aa-bb-cc-dd-ee-ff
+
+
+#####################################################################
+
+kill -TERM $PID
+wait $PID 2>/dev/null
+if [[ ${rc} -eq 0 ]]; then
+	echo PASSED
+else
+	echo FAILED
+fi
+exit ${rc}

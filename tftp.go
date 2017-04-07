@@ -9,12 +9,14 @@ import (
 )
 
 type TFTPServer struct {
-	Root string
+	Listen string
+	Root   string
 }
 
-func NewTFTPServer(root string) TFTPServer {
+func NewTFTPServer(listen, root string) TFTPServer {
 	srv := TFTPServer{
-		Root: root,
+		Listen: listen,
+		Root:   root,
 	}
 	return srv
 }
@@ -35,7 +37,7 @@ func (srv TFTPServer) Run() {
 		return nil
 	}, nil)
 
-	err := s.ListenAndServe(":69")
+	err := s.ListenAndServe(srv.Listen)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "tftp server died: %s\n", err)
 		os.Exit(1)

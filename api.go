@@ -34,19 +34,19 @@ func NewAPIServer(config Config) APIServer {
 		Flavor: "none",
 	}
 
-	srv.TFTP = NewTFTPServer(config.Root)
+	srv.TFTP = NewTFTPServer(config.ListenTFTP, config.Root)
 
 	srv.Nodes = make(map[string]string)
 	srv.SyncNodes()
 	return srv
 }
 
-func (srv APIServer) Run() {
+func (srv *APIServer) Run() {
 	go srv.TFTP.Run()
 
 	http.Handle("/api/", srv)
 	http.Handle("/", http.FileServer(http.Dir(srv.Config.Root)))
-	http.ListenAndServe(srv.Config.Listen, nil)
+	http.ListenAndServe(srv.Config.ListenHTTP, nil)
 }
 
 func (srv *APIServer) SyncNodes() {
@@ -66,7 +66,7 @@ func (srv *APIServer) SyncNodes() {
 	}
 }
 
-func (srv APIServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (srv *APIServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if matches(r, `^GET /api/status$`) {
 		b, err := json.Marshal(srv)
 		if err != nil {
@@ -101,16 +101,18 @@ func (srv APIServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			if err = m.Reboot(); err != nil {
 				fmt.Fprintf(os.Stderr, "  %s (skipping)\n", err)
 			}
+			srv.Nodes[m.Name] = "installing"
 		}
 
+		srv.Flavor = flavor
 		w.WriteHeader(204)
 		return
 	}
 
-	if matches(r, `^POST /api/[^/]*/(fail|ok)$`) {
+	if matches(r, `^POST /api/[^/]*/[^/]*$`) {
 		srv.SyncNodes()
 
-		re := regexp.MustCompile(`^/api/([^/]*)/(fail|ok)$`)
+		re := regexp.MustCompile(`^/api/([^/]*)/([^/]*)$`)
 		x := re.FindStringSubmatch(r.URL.Path)
 		if _, ok := srv.Nodes[x[1]]; !ok {
 			w.WriteHeader(404)
@@ -118,10 +120,18 @@ func (srv APIServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		found := false
 		for _, m := range srv.Config.Machines {
 			if m.Name == x[1] {
+				found = true
+				fmt.Fprintf(os.Stderr, "reseting TFTP configuration for %s (mac %s)\n", m.Name, m.MAC)
 				srv.TFTP.Reset(m.MAC)
 			}
+		}
+		if !found {
+			w.WriteHeader(404)
+			fmt.Fprintf(w, "unrecognized lab node '%s'\n", x[1])
+			return
 		}
 
 		srv.Nodes[x[1]] = x[2]
